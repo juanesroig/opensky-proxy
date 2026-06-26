@@ -1,13 +1,16 @@
 import express from 'express'
 import cors from 'cors'
 import 'dotenv/config'
-import { Auth, TokenPayload } from './types.js'
+import { type Auth, type TokenPayload } from './types.js'
 import { BroadcastPoller } from './polling.js'
 
 const app = express()
 
+const opensky_urls = {
+  STATES: "https://opensky-network.org/api/states/all",
+  TRACKS: "https://opensky-network.org/api/tracks/all",
+}
 const token_url = "https://auth.opensky-network.org/auth/realms/opensky-network/protocol/openid-connect/token"
-const opensky_states_url = "https://opensky-network.org/api/states/all"
 const opensky_client_id = process.env.OPENSKY_CLIENT_ID
 const opensky_client_secret = process.env.OPENSKY_CLIENT_SECRET
 const states_poll_interval_ms = 15000
@@ -79,7 +82,7 @@ const handle_token = async (
 const fetch_states = async () => {
   try {
     await ensure_auth_token()
-    const response = await fetch(opensky_states_url, {
+    const response = await fetch(opensky_urls.STATES, {
       headers: {
         Authorization: `Bearer ${auth?.token ?? ""}`,
       },
@@ -112,4 +115,44 @@ app.get("/api/opensky/states", handle_token, (req, res) => {
     poller.unregister(client_id)
     res.end()
   })
+})
+
+const fetch_tracks = async (icao24: string) => {
+  await ensure_auth_token()
+
+  const params = new URLSearchParams({
+    icao24,
+    time: "0",
+  })
+
+  const response = await fetch(`${opensky_urls.TRACKS}?${params.toString()}`, {
+    headers: {
+      Authorization: `Bearer ${auth?.token ?? ""}`,
+    },
+  })
+
+  if (!response.ok) {
+    throw new Error(`Tracks request failed with status ${response.status}`)
+  }
+
+  return response.json()
+}
+
+app.get("/api/opensky/tracks/:icao24", handle_token, async (req, res) => {
+  const icao24 = req.params.icao24
+
+  if (!icao24) {
+    return res.status(400).send("Missing icao24 parameter")
+  }
+
+  if (typeof icao24 !== "string") {
+    return res.status(400).send("icao24 parameter must be a string")
+  }
+
+  try {
+    const tracks = await fetch_tracks(icao24)
+    return res.json(tracks)
+  } catch (error) {
+    return res.status(502).send("Error fetching tracks from OpenSky API")
+  }
 })

@@ -1,0 +1,25 @@
+meta {
+  name: Tracks
+  type: http
+  seq: 2
+}
+
+get {
+  url: {{baseUrl}}/api/opensky/tracks/{{icao24}}
+  body: none
+  auth: none
+}
+
+vars:pre-request {
+  baseUrl: http://localhost:5000
+  icao24: 3c70cb
+}
+
+docs {
+  Current track (flight path) for a single aircraft identified by its
+  ICAO 24-bit address.
+  
+  The proxy calls OpenSky's `/tracks` endpoint with `time=0` to return
+  the live track. Set the `icao24` environment variable to the target
+  aircraft (lowercase hex, e.g. `3c6444`).
+}
