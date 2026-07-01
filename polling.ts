@@ -4,12 +4,15 @@ type ClientUUID = string
 type ResObjectByClientUUID = Map<ClientUUID, express.Response>
 type AsyncFetcher<T> = () => Promise<T>
 
+const MAX_DATA_AGE_MS = 60_000
+
 export class BroadcastPoller<T> {
   private get_data: AsyncFetcher<T>
   private time_ms: number
   private clients: ResObjectByClientUUID = new Map()
   private interval_id: NodeJS.Timeout | null = null
   private latest_data: T | null = null
+  private latest_data_at: number | null = null
   private is_fetching = false
 
   constructor(get_data: AsyncFetcher<T>, time_ms = 15_000) {
@@ -41,6 +44,7 @@ export class BroadcastPoller<T> {
     try {
       const data = await this.get_data()
       this.latest_data = data
+      this.latest_data_at = Date.now()
       for (const res of this.clients.values()) {
         this.write_sse(res, "success", data)
       }
@@ -57,6 +61,15 @@ export class BroadcastPoller<T> {
   register(res: express.Response) {
     const client_uuid = crypto.randomUUID()
     this.clients.set(client_uuid, res)
+
+    const is_stale =
+      this.latest_data_at === null ||
+      Date.now() - this.latest_data_at > MAX_DATA_AGE_MS
+
+    if (is_stale) {
+      this.latest_data = null
+      this.latest_data_at = null
+    }
 
     if (this.latest_data !== null) {
       this.write_sse(res, "success", this.latest_data)
