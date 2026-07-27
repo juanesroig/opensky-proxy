@@ -13,15 +13,25 @@ const opensky_urls = {
 const token_url = "https://auth.opensky-network.org/auth/realms/opensky-network/protocol/openid-connect/token"
 const opensky_client_id = process.env.OPENSKY_CLIENT_ID
 const opensky_client_secret = process.env.OPENSKY_CLIENT_SECRET
-const states_poll_interval_ms = 15000
+const states_poll_interval_ms = 15_000
+const opensky_fetch_timeout_ms = 10_000
 const port = Number(process.env.PORT)
 
 if (!Number.isFinite(port) || port <= 0) {
   throw new Error('Missing or invalid PORT in env')
 }
 
+const cors_origins = (process.env.CORS_ORIGIN ?? "")
+  .split(",")
+  .map((origin) => origin.trim())
+  .filter((origin) => origin.length > 0)
+
+if (cors_origins.length === 0) {
+  throw new Error('Missing CORS_ORIGIN in env (comma-separated list of allowed origins)')
+}
+
 app.use(cors({
-  origin: 'http://localhost:5173',
+  origin: cors_origins,
   credentials: false,
 }))
 
@@ -30,6 +40,24 @@ app.listen(port, () => {
 })
 
 let auth: Auth | undefined = undefined
+
+const parse_token_payload = (payload: unknown): TokenPayload => {
+  if (typeof payload !== "object" || payload === null) {
+    throw new Error("Auth response was not a JSON object")
+  }
+
+  const { access_token, expires_in } = payload as Partial<TokenPayload>
+
+  if (typeof access_token !== "string" || access_token.length === 0) {
+    throw new Error("Auth response missing access_token")
+  }
+
+  if (typeof expires_in !== "number" || !Number.isFinite(expires_in)) {
+    throw new Error("Auth response missing expires_in")
+  }
+
+  return { ...(payload as TokenPayload), access_token, expires_in }
+}
 
 const ensure_auth_token = async () => {
   if (!opensky_client_id || !opensky_client_secret) {
@@ -53,13 +81,14 @@ const ensure_auth_token = async () => {
       "Content-Type": "application/x-www-form-urlencoded",
     },
     body: params.toString(),
+    signal: AbortSignal.timeout(opensky_fetch_timeout_ms),
   })
 
   if (!response.ok) {
     throw new Error(`Auth failed with status ${response.status}`)
   }
 
-  const data: TokenPayload = await response.json()
+  const data = parse_token_payload(await response.json())
   auth = {
     token: data.access_token,
     expires_at: Date.now() + data.expires_in * 1000,
@@ -80,26 +109,26 @@ const handle_token = async (
 }
 
 const fetch_states = async () => {
-  try {
-    await ensure_auth_token()
-    const response = await fetch(opensky_urls.STATES, {
-      headers: {
-        Authorization: `Bearer ${auth?.token ?? ""}`,
-      },
-    })
+  await ensure_auth_token()
+  const response = await fetch(opensky_urls.STATES, {
+    headers: {
+      Authorization: `Bearer ${auth?.token ?? ""}`,
+    },
+    signal: AbortSignal.timeout(opensky_fetch_timeout_ms),
+  })
 
-    if (!response.ok) {
-      throw new Error(`States request failed with status ${response.status}`)
-    }
-
-    const json = await response.json()
-    return json
-  } catch (error) {
-    throw error
+  if (!response.ok) {
+    throw new Error(`States request failed with status ${response.status}`)
   }
+
+  return response.json()
 }
 
-const poller = new BroadcastPoller(fetch_states, states_poll_interval_ms)
+const poller = new BroadcastPoller(
+  fetch_states,
+  states_poll_interval_ms,
+  opensky_fetch_timeout_ms
+)
 app.get("/api/opensky/states", handle_token, (req, res) => {
   res.setHeader("Content-Type", "text/event-stream")
   res.setHeader("Cache-Control", "no-cache")
@@ -129,6 +158,7 @@ const fetch_tracks = async (icao24: string) => {
     headers: {
       Authorization: `Bearer ${auth?.token ?? ""}`,
     },
+    signal: AbortSignal.timeout(opensky_fetch_timeout_ms),
   })
 
   if (!response.ok) {

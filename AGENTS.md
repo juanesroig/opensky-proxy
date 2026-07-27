@@ -34,17 +34,27 @@ Policy:
 
 ## 3) Install / Build / Run
 
+Requires Node.js >= 20 (enforced via `engines` in `package.json`).
+
 Install dependencies:
 - `npm install`
 
 Build TypeScript:
-- `npx tsc index.ts --module nodenext --target es2022 --outDir dist`
+- `npm run build` (uses `tsconfig.json`; do not pass ad-hoc `tsc` CLI flags)
 
-Run server (build + execute, current script):
+Run server (expects a prior build):
 - `npm run start`
 
-Environment variables (`.env`):
+Build and run in one step (local dev):
+- `npm run dev`
+
+Deployment note: `build` and `start` are deliberately separate so hosts that
+install with `--omit=dev` still work. `typescript` is a devDependency, so
+`start` must never invoke `tsc`.
+
+Environment variables (`.env`, see `.env.example`):
 - `PORT`: HTTP port used by the Express server (required).
+- `CORS_ORIGIN`: comma-separated list of allowed browser origins (required).
 - `OPENSKY_CLIENT_ID`: OpenSky OAuth client id (required).
 - `OPENSKY_CLIENT_SECRET`: OpenSky OAuth client secret (required).
 
@@ -58,11 +68,13 @@ Manual smoke test:
 Current repo state:
 - No `lint` script in `package.json`.
 - No committed ESLint or Prettier config.
-- No `typecheck` script.
+- `npm run typecheck` (`tsc --noEmit`) is available.
+- `tsconfig.json` is committed and has `strict: true` enabled.
 
 Agent expectations:
 - Do not claim lint commands exist when they do not.
-- Use TypeScript compile as the current quality gate.
+- Use `npm run typecheck` as the current quality gate.
+- Do not weaken `strict` to make code compile.
 - Keep file formatting consistent with touched code.
 
 ## 5) Test Commands (Especially Single Test)

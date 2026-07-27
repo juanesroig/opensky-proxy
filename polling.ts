@@ -1,4 +1,5 @@
 import express from "express"
+import { randomUUID } from "node:crypto"
 
 type ClientUUID = string
 type ResObjectByClientUUID = Map<ClientUUID, express.Response>
@@ -9,15 +10,17 @@ const MAX_DATA_AGE_MS = 60_000
 export class BroadcastPoller<T> {
   private get_data: AsyncFetcher<T>
   private time_ms: number
+  private timeout_ms: number
   private clients: ResObjectByClientUUID = new Map()
   private interval_id: NodeJS.Timeout | null = null
   private latest_data: T | null = null
   private latest_data_at: number | null = null
   private is_fetching = false
 
-  constructor(get_data: AsyncFetcher<T>, time_ms = 15_000) {
+  constructor(get_data: AsyncFetcher<T>, time_ms = 15_000, timeout_ms = 10_000) {
     this.get_data = get_data
     this.time_ms = time_ms
+    this.timeout_ms = timeout_ms
   }
 
   private write_sse(res: express.Response, event: string, data: unknown) {
@@ -34,6 +37,23 @@ export class BroadcastPoller<T> {
     return "Unknown polling error"
   }
 
+  private async get_data_with_timeout(): Promise<T> {
+    let timeout_id: NodeJS.Timeout | undefined
+
+    const timeout = new Promise<never>((_resolve, reject) => {
+      timeout_id = setTimeout(
+        () => reject(new Error(`Poll timed out after ${this.timeout_ms}ms`)),
+        this.timeout_ms
+      )
+    })
+
+    try {
+      return await Promise.race([this.get_data(), timeout])
+    } finally {
+      clearTimeout(timeout_id)
+    }
+  }
+
   private async dispatcher() {
     if (this.is_fetching) {
       return
@@ -42,7 +62,7 @@ export class BroadcastPoller<T> {
     this.is_fetching = true
 
     try {
-      const data = await this.get_data()
+      const data = await this.get_data_with_timeout()
       this.latest_data = data
       this.latest_data_at = Date.now()
       for (const res of this.clients.values()) {
@@ -59,7 +79,7 @@ export class BroadcastPoller<T> {
   }
 
   register(res: express.Response) {
-    const client_uuid = crypto.randomUUID()
+    const client_uuid = randomUUID()
     this.clients.set(client_uuid, res)
 
     const is_stale =
