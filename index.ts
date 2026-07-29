@@ -61,6 +61,7 @@ const parse_token_payload = (payload: unknown): TokenPayload => {
 
 const ensure_auth_token = async () => {
   if (!opensky_client_id || !opensky_client_secret) {
+    console.error("Missing OpenSky credentials in env")
     throw new Error("Missing OpenSky credentials in env")
   }
 
@@ -75,23 +76,40 @@ const ensure_auth_token = async () => {
     client_secret: opensky_client_secret,
   })
 
-  const response = await fetch(token_url, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/x-www-form-urlencoded",
-    },
-    body: params.toString(),
-    signal: AbortSignal.timeout(opensky_fetch_timeout_ms),
-  })
+  const started_at = performance.now()
 
-  if (!response.ok) {
-    throw new Error(`Auth failed with status ${response.status}`)
-  }
+  try {
+    const response = await fetch(token_url, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/x-www-form-urlencoded",
+      },
+      body: params.toString(),
+      signal: AbortSignal.timeout(opensky_fetch_timeout_ms),
+    })
 
-  const data = parse_token_payload(await response.json())
-  auth = {
-    token: data.access_token,
-    expires_at: Date.now() + data.expires_in * 1000,
+    const body = await response.text()
+    const elapsed_ms = Math.round(performance.now() - started_at)
+
+    if (!response.ok) {
+      console.error(`[token] ${response.status} in ${elapsed_ms}ms`, body.slice(0, 300))
+      throw new Error(`Auth failed with status ${response.status}`)
+    }
+
+    console.log(`[token] ${response.status} in ${elapsed_ms}ms`)
+
+    const data = parse_token_payload(JSON.parse(body))
+    auth = {
+      token: data.access_token,
+      expires_at: Date.now() + data.expires_in * 1000,
+    }
+  } catch (error) {
+    console.error(`[token] FAIL after ${Math.round(performance.now() - started_at)}ms`, {
+      name: (error as Error).name,
+      message: (error as Error).message,
+      cause: (error as { cause?: unknown }).cause,
+    })
+    throw error
   }
 }
 
