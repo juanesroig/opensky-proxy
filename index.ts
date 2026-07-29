@@ -14,7 +14,7 @@ const token_url = "https://auth.opensky-network.org/auth/realms/opensky-network/
 const opensky_client_id = process.env.OPENSKY_CLIENT_ID
 const opensky_client_secret = process.env.OPENSKY_CLIENT_SECRET
 const states_poll_interval_ms = 15_000
-const opensky_fetch_timeout_ms = 10_000
+const opensky_fetch_timeout_ms = 20_000
 const port = Number(process.env.PORT)
 
 if (!Number.isFinite(port) || port <= 0) {
