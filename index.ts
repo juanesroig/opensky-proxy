@@ -128,7 +128,6 @@ const handle_opensky_token = async (
 }
 
 const fetch_states = async () => {
-  await ensure_auth_token()
   const response = await fetch(api_urls.STATES, {
     headers: {
       Authorization: `Bearer ${auth?.token ?? ""}`,
