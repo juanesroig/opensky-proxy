@@ -6,10 +6,11 @@ import { BroadcastPoller } from './polling.js'
 
 const app = express()
 
-const opensky_urls = {
-  STATES: "https://opensky-network.org/api/states/all",
+const api_urls = {
+  STATES: `https://airlabs.co/api/v9/flights?api_key=${process.env.AIRLABS_API_KEY}`,
   TRACKS: "https://opensky-network.org/api/tracks/all",
 }
+
 const token_url = "https://auth.opensky-network.org/auth/realms/opensky-network/protocol/openid-connect/token"
 const opensky_client_id = process.env.OPENSKY_CLIENT_ID
 const opensky_client_secret = process.env.OPENSKY_CLIENT_SECRET
@@ -113,7 +114,7 @@ const ensure_auth_token = async () => {
   }
 }
 
-const handle_token = async (
+const handle_opensky_token = async (
   _req: express.Request,
   res: express.Response,
   next: express.NextFunction
@@ -128,7 +129,7 @@ const handle_token = async (
 
 const fetch_states = async () => {
   await ensure_auth_token()
-  const response = await fetch(opensky_urls.STATES, {
+  const response = await fetch(api_urls.STATES, {
     headers: {
       Authorization: `Bearer ${auth?.token ?? ""}`,
     },
@@ -139,7 +140,8 @@ const fetch_states = async () => {
     throw new Error(`States request failed with status ${response.status}`)
   }
 
-  return response.json()
+  const json = await response.json() as Record<string, unknown>
+  return json.response
 }
 
 const poller = new BroadcastPoller(
@@ -147,7 +149,7 @@ const poller = new BroadcastPoller(
   states_poll_interval_ms,
   opensky_fetch_timeout_ms
 )
-app.get("/api/opensky/states", handle_token, (req, res) => {
+app.get("/api/states", (req, res) => {
   res.setHeader("Content-Type", "text/event-stream")
   res.setHeader("Cache-Control", "no-cache")
   res.setHeader("Connection", "keep-alive")
@@ -172,7 +174,7 @@ const fetch_tracks = async (icao24: string) => {
     time: "0",
   })
 
-  const response = await fetch(`${opensky_urls.TRACKS}?${params.toString()}`, {
+  const response = await fetch(`${api_urls.TRACKS}?${params.toString()}`, {
     headers: {
       Authorization: `Bearer ${auth?.token ?? ""}`,
     },
@@ -186,7 +188,7 @@ const fetch_tracks = async (icao24: string) => {
   return response.json()
 }
 
-app.get("/api/opensky/tracks/:icao24", handle_token, async (req, res) => {
+app.get("/api/tracks/:icao24", handle_opensky_token, async (req, res) => {
   const icao24 = req.params.icao24
 
   if (!icao24) {

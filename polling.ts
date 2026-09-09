@@ -17,7 +17,7 @@ export class BroadcastPoller<T> {
   private latest_data_at: number | null = null
   private is_fetching = false
 
-  constructor(get_data: AsyncFetcher<T>, time_ms = 15_000, timeout_ms = 10_000) {
+  constructor(get_data: AsyncFetcher<T>, time_ms = 30_000, timeout_ms = 10_000) {
     this.get_data = get_data
     this.time_ms = time_ms
     this.timeout_ms = timeout_ms

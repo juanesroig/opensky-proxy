@@ -14,9 +14,13 @@ headers {
   Accept: text/event-stream
 }
 
+vars:pre-request {
+  baseUrl: https://airspace-api.juanesroig.com
+}
+
 docs {
   Server-Sent Events stream of all OpenSky aircraft states.
-
+  
   The connection stays open and the proxy pushes a new `data` event on
   every poll interval. An initial `connected` event is sent on connect.
 }

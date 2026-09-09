@@ -1,0 +1,20 @@
+meta {
+  name: Airlabs realtime flights
+  type: http
+  seq: 3
+}
+
+get {
+  url: https://airlabs.co/api/v9/flights?api_key=8fd94b4b-c6e5-4340-95b3-9217633e4b95
+  body: none
+  auth: inherit
+}
+
+params:query {
+  api_key: 8fd94b4b-c6e5-4340-95b3-9217633e4b95
+}
+
+settings {
+  encodeUrl: true
+  forwardAuthorizationHeader: false
+}
